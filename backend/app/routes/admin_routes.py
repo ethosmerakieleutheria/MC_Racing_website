@@ -1,13 +1,14 @@
 from fastapi import APIRouter, HTTPException, Depends
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from datetime import datetime
-from typing import List
+from typing import List, Optional
 from passlib.context import CryptContext
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr
 
 from ..database import get_db
 from ..models.time_slots import TimeSlot, SlotType
 from ..models.admin import Admin
+from ..models.organizers import Organizer
 
 router = APIRouter()
 
@@ -22,6 +23,14 @@ class TimeBlockRequest(BaseModel):
     start_time: datetime
     end_time: datetime
     reason: str
+
+class OrganizerCreate(BaseModel):
+    first_name: str
+    last_name: str
+    email: EmailStr
+    phone: str
+    password: str  
+
 
 async def verify_admin(password: str, db: AsyncIOMotorDatabase) -> bool:
     """Verify admin password against stored hash"""
@@ -51,6 +60,39 @@ async def setup_admin(
     
     await db.admin.insert_one(admin.dict())
     return {"message": "Admin account created successfully"}
+
+@router.post("/admin/organizers/create")
+async def create_organizer(
+    admin_password: str,
+    organizer_data: OrganizerCreate,
+    db: AsyncIOMotorDatabase = Depends(get_db)
+):
+    """Create a new organizer (admin only)"""
+    # Verify admin password
+    if not await verify_admin(admin_password, db):
+        raise HTTPException(status_code=401, detail="Invalid admin password")
+    
+    # Check if organizer already exists
+    existing_organizer = await db.organizers.find_one({"email": organizer_data.email})
+    if existing_organizer:
+        raise HTTPException(status_code=400, detail="Organizer with this email already exists")
+    
+    # Create organizer with hashed password
+    organizer = Organizer(
+        first_name=organizer_data.first_name,
+        last_name=organizer_data.last_name,
+        email=organizer_data.email,
+        phone=organizer_data.phone,
+        password_hash=pwd_context.hash(organizer_data.password),
+        created_by_admin=str((await db.admin.find_one({}))["_id"])
+    )
+    
+    result = await db.organizers.insert_one(organizer.dict())
+    
+    return {
+        "message": "Organizer created successfully",
+        "organizer_id": str(result.inserted_id)
+    }
 
 @router.post("/admin/change-password")
 async def change_admin_password(
@@ -154,3 +196,29 @@ async def get_blocked_slots(
         "total_blocked_slots": len(formatted_slots),
         "blocked_slots": formatted_slots
     }
+
+@router.post("/admin/discounts/create")
+async def create_discount_code(
+    admin_password: str,
+    code: str,
+    discount_percentage: float,
+    max_uses: Optional[int],
+    valid_days: int,
+    db: AsyncIOMotorDatabase = Depends(get_db)
+):
+    """Create a new discount code"""
+    if not await verify_admin(admin_password, db):
+        raise HTTPException(status_code=401, detail="Invalid admin password")
+    
+    # Create discount code
+    discount = DiscountCode(
+        code=code.upper(),
+        discount_percentage=discount_percentage,
+        max_uses=max_uses,
+        valid_from=datetime.utcnow(),
+        valid_until=datetime.utcnow() + timedelta(days=valid_days),
+        created_by_admin=str((await db.admin.find_one({}))["_id"])
+    )
+    
+    await db.discount_codes.insert_one(discount.dict())
+    return {"message": "Discount code created successfully"}

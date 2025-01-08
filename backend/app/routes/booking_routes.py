@@ -3,7 +3,7 @@ from motor.motor_asyncio import AsyncIOMotorDatabase
 from datetime import datetime, timedelta
 from typing import List
 import pytz
-from pydantic import BaseModel, validator
+from pydantic import BaseModel, validator, EmailStr
 from bson import ObjectId
 
 from ..database import get_db
@@ -109,12 +109,6 @@ async def create_race(
         }
     }
 
-from fastapi import APIRouter, HTTPException, Depends
-from motor.motor_asyncio import AsyncIOMotorDatabase
-from bson import ObjectId
-from datetime import datetime
-
-router = APIRouter()
 
 # Helper function to validate ObjectId
 def validate_object_id(id_str: str, field_name: str) -> ObjectId:
@@ -304,3 +298,86 @@ async def list_races(
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch races: {str(e)}")
+    
+@router.post("/timeslots/book")
+async def book_general_slot(
+    time_slot: TimeSlotRequest,
+    customer_name: str,
+    customer_email: EmailStr,
+    customer_phone: str,
+    db: AsyncIOMotorDatabase = Depends(get_db)
+):
+    """Book a general driving slot (no registration required)"""
+    start_datetime = parse_datetime(time_slot.date, time_slot.start_time)
+    end_datetime = parse_datetime(time_slot.date, time_slot.end_time)
+    
+    # Validate dates
+    current_time = datetime.utcnow()
+    if start_datetime <= current_time:
+        raise HTTPException(status_code=400, detail="Booking time must be in the future")
+    
+    if start_datetime >= end_datetime:
+        raise HTTPException(status_code=400, detail="End time must be after start time")
+    
+    # Check if slot is available
+    existing_slot = await db.time_slots.find_one({
+        "start_time": {"$lt": end_datetime},
+        "end_time": {"$gt": start_datetime}
+    })
+    
+    if existing_slot:
+        raise HTTPException(status_code=400, detail="Time slot not available")
+    
+    # Create booking
+    booking = {
+        "customer_name": customer_name,
+        "customer_email": customer_email,
+        "customer_phone": customer_phone,
+        "start_time": start_datetime,
+        "end_time": end_datetime,
+        "booking_type": "general",
+        "status": "pending_payment",
+        "created_at": current_time
+    }
+    
+    result = await db.bookings.insert_one(booking)
+    
+    return {
+        "message": "Booking created successfully",
+        "booking_id": str(result.inserted_id),
+        "status": "pending_payment",
+        "next_steps": "Please complete payment to confirm your booking"
+    }
+
+@router.post("/races/{race_id}/register")
+async def register_for_race(
+    race_id: str,
+    user_id: str,
+    db: AsyncIOMotorDatabase = Depends(get_db)
+):
+    """Register intent to participate in a race (requires user account)"""
+    # Validate race and user exist
+    race = await db.races.find_one({"_id": ObjectId(race_id)})
+    user = await db.users.find_one({"_id": ObjectId(user_id)})
+    
+    if not race:
+        raise HTTPException(status_code=404, detail="Race not found")
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Create race registration
+    registration = {
+        "race_id": race_id,
+        "user_id": user_id,
+        "status": "pending_payment",
+        "created_at": datetime.utcnow()
+    }
+    
+    result = await db.race_registrations.insert_one(registration)
+    
+    return {
+        "message": "Race registration pending",
+        "registration_id": str(result.inserted_id),
+        "entry_fee": race["entry_fee"],
+        "next_steps": "Please complete payment to confirm your participation"
+    }
