@@ -4,6 +4,7 @@
   "private": true,
   "dependencies": {
     "@craco/craco": "^7.1.0",
+    "@mediapipe/tasks-vision": "^0.10.20",
     "@react-three/drei": "^9.117.3",
     "@react-three/fiber": "^8.17.10",
     "@stripe/stripe-js": "^5.5.0",

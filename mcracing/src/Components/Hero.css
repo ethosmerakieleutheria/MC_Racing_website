@@ -1,0 +1,19 @@
+@keyframes fadeInOut {
+    0% {
+      opacity: 0; /* Start invisible */
+    }
+    20% {
+      opacity: 1; /* Fully visible */
+    }
+    85% {
+      opacity: 1; /* Remain fully visible */
+    }
+    100% {
+      opacity: 0; /* Fade out */
+    }
+  }
+  
+  .video-container {
+    animation: fadeInOut 19s infinite; /* Adjust duration for your video length */
+  }
+  
