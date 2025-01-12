@@ -1,1 +1,4 @@
-"MC_Racing_website\backend\.env"
+/node_modules
+.env
+/backend/.env
+/mcracing/.env
