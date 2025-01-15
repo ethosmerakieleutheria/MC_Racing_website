@@ -33,6 +33,7 @@ async def get_db():
     """Dependency for getting database instance"""
     try:
         db = mongo_engine.get_db()
+        print(db.name)
         await mongo_engine.verify_connection()  # Verify connection is alive
         yield db
     except Exception as e:

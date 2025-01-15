@@ -258,21 +258,26 @@ async def create_race(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to create race: {str(e)}")
 
+
+
 @router.get("/races")
 async def list_races(
-    show_past: bool = False,
+    show_past: bool = True,
     db: AsyncIOMotorDatabase = Depends(get_db)
 ):
     """List all races with an option to include past races"""
     try:
+        # Get the current time
+        current_time = datetime.utcnow()
+
         # Build the query based on parameters
-        query = {"status": "open"}
-        
-        # Only filter by date if we don't want to show past races
-        if not show_past:
-            current_time = datetime.utcnow()
-            query["start_time"] = {"$gt": current_time}
-            
+        if show_past:
+            query = {}
+        else:
+            query = {
+                "date": {"$gte": current_time.strftime("%Y-%m-%d")}  # Compare as strings
+            }
+
         # Find races based on query
         races = await db.races.find(query).to_list(None)
 
@@ -282,22 +287,24 @@ async def list_races(
             formatted_races.append({
                 "id": str(race["_id"]),
                 "name": race["name"],
-                "start_time": race["start_time"].strftime("%m/%d/%Y %I:%M %p"),
-                "end_time": race["end_time"].strftime("%m/%d/%Y %I:%M %p"),
-                "current_participants": race["current_participants"],
+                "date": race["date"],
+                "price": race["price"],
+                "level": race["level"],
                 "max_participants": race["max_participants"],
-                "entry_fee": race["entry_fee"],
-                "race_type": race["race_type"],
-                "status": race["status"]
+                "current_participants": race["current_participants"],
+                "status": race["status"],
+                "race_type": race["race_type"]
             })
 
         return {
             "total_races": len(formatted_races),
             "races": formatted_races,
-            "note": "Showing only future races. Set show_past=true to see past races." if not show_past else "Showing all races."
+            "note": "Showing all races." if show_past else "Showing only future races."
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch races: {str(e)}")
+
+
     
 @router.post("/timeslots/book")
 async def book_general_slot(

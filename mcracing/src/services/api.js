@@ -9,16 +9,18 @@ const api = axios.create({
 });
 
 export const raceAPI = {
-  getRaces: () => api.get('/races'),
+  get_all_races: () => api.get('/races'),
   getRaceById: (id) => api.get(`/races/${id}`),
   registerForRace: (raceId, userData) => api.post(`/races/${raceId}/register`, userData),
   createPaymentIntent: (raceId) => api.post(`/payment/create-intent`, { raceId }),
 };
 
 export const trainingAPI = {
-  getPrograms: () => api.get('/training/slots'),
-  registerForTraining: (slotId, userData) => api.post(`/training/register`, { slotId, ...userData }),
+  getPrograms: () => api.get('/training/slots'), // Ensure this matches your FastAPI route
+  registerForTraining: (slotId, userData) =>
+    api.post('/training/register', { slotId, ...userData }),
 };
+
 
 export const leaderboardAPI = {
   getLeaderboard: () => api.get('/leaderboard/top'),

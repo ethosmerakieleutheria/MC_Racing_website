@@ -7,6 +7,12 @@ from ..database import get_db
 
 router = APIRouter()
 
+@router.get("/races")
+async def get_all_races(db: AsyncIOMotorDatabase = Depends(get_db)):
+    races = await db.races.find().to_list(length=100)
+    return {"total_races": len(races), "races": races}
+
+
 @router.get("/timeslots/available")
 async def get_available_slots(
     start_date: datetime,
